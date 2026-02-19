@@ -1,0 +1,37 @@
+
+name: Production CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-and-verify:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Source Code
+      uses: actions/checkout@v4
+
+    - name: Setup Environment
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+
+    - name: Validate Core Structure
+      run: |
+        echo "🔍 Memulai validasi integritas aplikasi..."
+        ls -la
+        [ -f index.html ] || exit 1
+        [ -f index.tsx ] || exit 1
+        [ -f App.tsx ] || exit 1
+        [ -d components ] || exit 1
+        echo "✅ Struktur file valid."
+
+    - name: JSON Schema Check
+      run: |
+        cat metadata.json | jq .
+        cat package.json | jq .
+        echo "✅ Konfigurasi metadata valid."

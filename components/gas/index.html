@@ -1,0 +1,215 @@
+
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ARSUDI AI - BP PAUD & PNF</title>
+    
+    <!-- 1. LOAD REACT CORE (MANDATORY ORDER) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    
+    <!-- 2. LOAD BABEL & CSS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
+    
+    <!-- 3. LOAD UI LIBRARIES (NO CROSSORIGIN TO PREVENT CORS ISSUES IN GAS IFRAME) -->
+    <script src="https://unpkg.com/react-router-dom@6.22.3/dist/umd/react-router-dom.production.min.js"></script>
+    <script src="https://unpkg.com/lucide@0.344.0/dist/umd/lucide.min.js"></script>
+    <script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
+    
+    <!-- 4. GOOGLE AI (ESM SHIM) -->
+    <script type="module">
+        import { GoogleGenAI } from "https://esm.sh/@google/genai@1.3.0";
+        window.GoogleGenAI = GoogleGenAI;
+    </script>
+    
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; margin: 0; overflow: hidden; }
+        #initial-loader {
+            position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+            background: radial-gradient(circle at center, #1e1b4b, #020617);
+            color: white; z-index: 9999; transition: opacity 0.5s ease;
+        }
+        .spinner {
+            width: 50px; height: 50px; border: 4px solid rgba(99, 102, 241, 0.1);
+            border-top: 4px solid #6366f1; border-radius: 50%;
+            animation: spin 1s linear infinite; margin: 0 auto 1.5rem;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        #root { opacity: 0; transition: opacity 0.5s ease; height: 100vh; }
+        #root.ready { opacity: 1; }
+        .error-card {
+            background: white; color: #1e293b; padding: 2.5rem; border-radius: 2.5rem;
+            max-width: 450px; width: 90%; text-align: center; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+        }
+    </style>
+</head>
+<body>
+    <div id="initial-loader">
+        <div id="loader-content" class="text-center">
+            <div class="spinner"></div>
+            <p id="loader-text" class="font-black tracking-[0.3em] text-[10px] animate-pulse uppercase text-indigo-400">Sinkronisasi Server...</p>
+        </div>
+    </div>
+
+    <div id="root"></div>
+
+    <script type="text/babel">
+        /**
+         * Penanganan Error Inisialisasi GAS yang lebih aman
+         */
+        const showError = (msg) => {
+            const loader = document.getElementById('loader-content');
+            if (loader) {
+                loader.innerHTML = `
+                    <div class="error-card">
+                        <div class="bg-rose-100 text-rose-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+                        </div>
+                        <h2 class="text-xl font-black text-slate-900 mb-2 uppercase tracking-tight">Gagal Memuat Library</h2>
+                        <p class="text-slate-500 text-sm mb-8 leading-relaxed">${msg}</p>
+                        <button onclick="window.location.reload()" class="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl shadow-indigo-100">Coba Muat Ulang</button>
+                    </div>
+                `;
+            }
+        };
+
+        try {
+            const initApp = () => {
+                // Verifikasi keberadaan semua library global
+                const deps = {
+                    React: window.React,
+                    ReactDOM: window.ReactDOM,
+                    Router: window.ReactRouterDOM,
+                    Recharts: window.Recharts,
+                    Lucide: window.lucide
+                };
+
+                const missing = Object.entries(deps).filter(([k, v]) => !v).map(([k]) => k);
+                
+                if (missing.length > 0) {
+                    console.warn("Library belum siap, menunggu...", missing);
+                    if (window.retryCount > 50) { // Berhenti setelah ~5 detik
+                        showError("Beberapa komponen sistem ( " + missing.join(", ") + " ) gagal diunduh dari server pusat.");
+                        return;
+                    }
+                    window.retryCount = (window.retryCount || 0) + 1;
+                    setTimeout(initApp, 100);
+                    return;
+                }
+
+                renderReactApp();
+            };
+
+            const renderReactApp = () => {
+                const { useState, useEffect, useMemo } = React;
+                const { HashRouter, Routes, Route, Link, Navigate, useNavigate, useParams } = window.ReactRouterDOM;
+                const { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } = window.Recharts;
+
+                const GAS_API_KEY = <?!= apiKey ?>;
+
+                const Icon = ({ name, size = 18, className = "" }) => {
+                    useEffect(() => { 
+                        if (window.lucide) window.lucide.createIcons(); 
+                    }, [name]);
+                    return <i data-lucide={name} style={{width: size, height: size}} className={className}></i>;
+                };
+
+                // --- Dashboard Component ---
+                const Dashboard = ({ letters }) => {
+                    const stats = useMemo(() => ({
+                        total: letters.length,
+                        masuk: letters.filter(l => l.type === 'MASUK').length,
+                        keluar: letters.filter(l => l.type === 'KELUAR').length
+                    }), [letters]);
+
+                    return (
+                        <div className="space-y-8 p-4 animate-in fade-in duration-700">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 group hover:border-indigo-200 transition-all">
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 group-hover:text-indigo-400 transition-colors">Total Arsip</p>
+                                    <h3 className="text-4xl font-black text-slate-900">{stats.total}</h3>
+                                </div>
+                                <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-blue-50">
+                                    <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-2">Surat Masuk</p>
+                                    <h3 className="text-4xl font-black text-blue-600">{stats.masuk}</h3>
+                                </div>
+                                <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-emerald-50">
+                                    <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-2">Surat Keluar</p>
+                                    <h3 className="text-4xl font-black text-emerald-600">{stats.keluar}</h3>
+                                </div>
+                            </div>
+                            <div className="bg-slate-900 p-12 rounded-[3.5rem] text-white text-center shadow-2xl relative overflow-hidden">
+                                <div className="absolute top-0 right-0 p-10 opacity-10"><Icon name="database" size={120} /></div>
+                                <h2 className="text-3xl font-black mb-4 uppercase tracking-tight">Database Cloud Aktif</h2>
+                                <p className="opacity-60 max-w-xl mx-auto italic font-medium">Data Anda tersimpan dengan aman di infrastruktur BP PAUD & PNF.</p>
+                            </div>
+                        </div>
+                    );
+                };
+
+                // --- Main App Component ---
+                const App = () => {
+                    const [letters, setLetters] = useState([]);
+                    const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
+                    useEffect(() => {
+                        if (typeof google !== 'undefined') {
+                            google.script.run.withSuccessHandler((res) => {
+                                if (res && res.letters) {
+                                    try { setLetters(JSON.parse(res.letters)); } catch(e) { console.error(e); }
+                                }
+                                document.getElementById('initial-loader').style.opacity = '0';
+                                setTimeout(() => {
+                                    document.getElementById('initial-loader').style.display = 'none';
+                                    document.getElementById('root').classList.add('ready');
+                                }, 500);
+                            }).getAppInitializationData();
+                        }
+                    }, []);
+
+                    return (
+                        <HashRouter>
+                            <div className="flex h-screen overflow-hidden bg-slate-50">
+                                <aside className={`${isSidebarOpen ? 'w-64' : 'w-20'} bg-slate-950 text-white transition-all flex flex-col z-50`}>
+                                    <div className="p-8 border-b border-white/5 flex items-center gap-4">
+                                        <div className="p-2 bg-indigo-600 rounded-xl"><Icon name="file-text" /></div>
+                                        {isSidebarOpen && <span className="font-black uppercase tracking-widest text-xs">Arsudi AI</span>}
+                                    </div>
+                                    <nav className="flex-1 p-5 space-y-3 mt-4">
+                                        <Link to="/" className="flex items-center gap-4 p-4 rounded-2xl hover:bg-white/5 transition-all">
+                                            <Icon name="layout-dashboard" /> 
+                                            {isSidebarOpen && <span className="text-[10px] font-black uppercase tracking-[0.2em]">Dashboard</span>}
+                                        </Link>
+                                    </nav>
+                                    <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-8 border-t border-white/5 text-slate-500 hover:text-white flex justify-center transition-colors">
+                                        <Icon name={isSidebarOpen ? "chevron-left" : "chevron-right"} />
+                                    </button>
+                                </aside>
+                                <main className="flex-1 overflow-y-auto p-10">
+                                    <Routes>
+                                        <Route path="/" element={<Dashboard letters={letters} />} />
+                                        <Route path="*" element={<Navigate to="/" replace />} />
+                                    </Routes>
+                                </main>
+                            </div>
+                        </HashRouter>
+                    );
+                };
+
+                const root = ReactDOM.createRoot(document.getElementById('root'));
+                root.render(<App />);
+            };
+
+            initApp();
+
+        } catch (err) {
+            console.error("Fatal initialization error:", err);
+            showError(err.message);
+        }
+    </script>
+</body>
+</html>

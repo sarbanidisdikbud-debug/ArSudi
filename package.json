@@ -1,0 +1,22 @@
+
+{
+  "name": "arsudi-ai",
+  "version": "1.1.0",
+  "private": true,
+  "description": "Modern AI-Powered Document Archiving System",
+  "main": "index.html",
+  "scripts": {
+    "start": "npx serve .",
+    "test": "echo \"Validating...\" && exit 0"
+  },
+  "keywords": [
+    "archive",
+    "gemini-ai",
+    "react"
+  ],
+  "author": "BP PAUD & PNF",
+  "license": "MIT",
+  "devDependencies": {
+    "serve": "^14.2.4"
+  }
+}
